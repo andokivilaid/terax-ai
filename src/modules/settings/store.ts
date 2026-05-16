@@ -12,6 +12,26 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 
 export type ThemePref = "system" | "light" | "dark";
 
+export const FILE_SORT_OPTIONS = [
+  "name-asc",
+  "name-desc",
+  "mtime-desc",
+  "mtime-asc",
+  "type-asc",
+  "type-desc",
+] as const;
+
+export type FileSort = (typeof FILE_SORT_OPTIONS)[number];
+
+export const FILE_SORT_LABELS: Record<FileSort, string> = {
+  "name-asc": "Name (A → Z)",
+  "name-desc": "Name (Z → A)",
+  "mtime-desc": "Last edited (newest)",
+  "mtime-asc": "Last edited (oldest)",
+  "type-asc": "Type (A → Z)",
+  "type-desc": "Type (Z → A)",
+};
+
 export const EDITOR_THEMES = [
   "atomone",
   "aura",
@@ -56,6 +76,7 @@ export type Preferences = {
   recentModelIds: string[];
   vimMode: boolean;
   showHidden: boolean;
+  fileSort: FileSort;
   terminalWebglEnabled: boolean;
   terminalFontSize: number;
   terminalScrollback: number;
@@ -83,6 +104,7 @@ const KEY_RECENT_MODELS = "recentModelIds";
 const KEY_VIM_MODE = "vimMode";
 const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
+const KEY_FILE_SORT = "fileSort";
 const KEY_TERMINAL_WEBGL_ENABLED = "terminalWebglEnabled";
 const KEY_TERMINAL_FONT_SIZE = "terminalFontSize";
 const KEY_TERMINAL_SCROLLBACK = "terminalScrollback";
@@ -123,6 +145,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   recentModelIds: [],
   vimMode: false,
   showHidden: false,
+  fileSort: "name-asc",
   terminalWebglEnabled: true,
   terminalFontSize: TERMINAL_FONT_SIZE_DEFAULT,
   terminalScrollback: TERMINAL_SCROLLBACK_DEFAULT,
@@ -193,6 +216,12 @@ export async function loadPreferences(): Promise<Preferences> {
       get<boolean>(KEY_SHOW_HIDDEN) ??
       get<boolean>(LEGACY_KEY_SHOW_HIDDEN_DIRS) ??
       DEFAULT_PREFERENCES.showHidden,
+    fileSort: (() => {
+      const raw = get<string>(KEY_FILE_SORT);
+      return (FILE_SORT_OPTIONS as readonly string[]).includes(raw ?? "")
+        ? (raw as FileSort)
+        : DEFAULT_PREFERENCES.fileSort;
+    })(),
     terminalWebglEnabled:
       get<boolean>(KEY_TERMINAL_WEBGL_ENABLED) ??
       DEFAULT_PREFERENCES.terminalWebglEnabled,
@@ -283,6 +312,10 @@ export async function setShowHidden(value: boolean): Promise<void> {
   await writePref(KEY_SHOW_HIDDEN, value);
 }
 
+export async function setFileSort(value: FileSort): Promise<void> {
+  await writePref(KEY_FILE_SORT, value);
+}
+
 export async function setTerminalWebglEnabled(value: boolean): Promise<void> {
   await writePref(KEY_TERMINAL_WEBGL_ENABLED, value);
 }
@@ -353,6 +386,7 @@ export async function onPreferencesChange(
     [KEY_RECENT_MODELS]: "recentModelIds",
     [KEY_VIM_MODE]: "vimMode",
     [KEY_SHOW_HIDDEN]: "showHidden",
+    [KEY_FILE_SORT]: "fileSort",
     [KEY_TERMINAL_WEBGL_ENABLED]: "terminalWebglEnabled",
     [KEY_TERMINAL_FONT_SIZE]: "terminalFontSize",
     [KEY_TERMINAL_SCROLLBACK]: "terminalScrollback",

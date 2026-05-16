@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { usePreferencesStore } from "@/modules/settings/preferences";
+import type { FileSort } from "@/modules/settings/store";
 
 export type DirEntry = {
   name: string;
@@ -39,8 +40,43 @@ type Options = {
   onPathDeleted?: (path: string) => void;
 };
 
+function extensionOf(name: string): string {
+  // Dot-prefixed files like `.env` have no extension; treat as empty.
+  const i = name.lastIndexOf(".");
+  if (i <= 0 || i === name.length - 1) return "";
+  return name.slice(i + 1).toLowerCase();
+}
+
+function compareEntries(a: DirEntry, b: DirEntry, sort: FileSort): number {
+  // Dirs (and dir-like symlinks) always come before files, regardless of sort.
+  const dirRank = (e: DirEntry) => (e.kind === "file" ? 1 : 0);
+  const dr = dirRank(a) - dirRank(b);
+  if (dr !== 0) return dr;
+
+  const nameAsc = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  switch (sort) {
+    case "name-asc":
+      return nameAsc;
+    case "name-desc":
+      return -nameAsc;
+    case "mtime-desc":
+      return b.mtime - a.mtime || nameAsc;
+    case "mtime-asc":
+      return a.mtime - b.mtime || nameAsc;
+    case "type-asc": {
+      const c = extensionOf(a.name).localeCompare(extensionOf(b.name));
+      return c !== 0 ? c : nameAsc;
+    }
+    case "type-desc": {
+      const c = extensionOf(b.name).localeCompare(extensionOf(a.name));
+      return c !== 0 ? c : nameAsc;
+    }
+  }
+}
+
 export function useFileTree(rootPath: string | null, options?: Options) {
   const showHidden = usePreferencesStore((s) => s.showHidden);
+  const fileSort = usePreferencesStore((s) => s.fileSort);
   const showHiddenRef = useRef(showHidden);
   const [nodes, setNodes] = useState<TreeState>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -235,8 +271,23 @@ export function useFileTree(rootPath: string | null, options?: Options) {
     [fetchChildren, options],
   );
 
+  const sortedNodes = useMemo<TreeState>(() => {
+    const out: TreeState = {};
+    for (const [path, state] of Object.entries(nodes)) {
+      if (state.status === "loaded") {
+        const sorted = [...state.entries].sort((a, b) =>
+          compareEntries(a, b, fileSort),
+        );
+        out[path] = { status: "loaded", entries: sorted };
+      } else {
+        out[path] = state;
+      }
+    }
+    return out;
+  }, [nodes, fileSort]);
+
   return {
-    nodes,
+    nodes: sortedNodes,
     expanded,
     pendingCreate,
     renaming,

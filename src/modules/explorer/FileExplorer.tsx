@@ -7,13 +7,30 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  EyeIcon,
   FileAddIcon,
   Folder01Icon,
   FolderAddIcon,
   Refresh01Icon,
   Search01Icon,
+  ViewOffSlashIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { usePreferencesStore } from "@/modules/settings/preferences";
+import {
+  FILE_SORT_LABELS,
+  FILE_SORT_OPTIONS,
+  setFileSort,
+  setShowHidden,
+  type FileSort,
+} from "@/modules/settings/store";
 import {
   forwardRef,
   useEffect,
@@ -63,6 +80,8 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
     ref,
   ) => {
     const tree = useFileTree(rootPath, { onPathRenamed, onPathDeleted });
+    const fileSort = usePreferencesStore((s) => s.fileSort);
+    const showHidden = usePreferencesStore((s) => s.showHidden);
     const [selectedPath, setSelectedPath] = useState<string | null>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isSearchActive, setIsSearchActive] = useState(false);
@@ -229,20 +248,38 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
         onKeyDown={handleKeyDown}
       >
         <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border/60 px-2">
-          <span
-            className="flex-1 flex truncate text-xs font-medium text-foreground/80"
-            title={rootPath}
-          >
-            <img
-              src={folderIconUrl(basename(rootPath), false)}
-              alt=""
-              height={15}
-              width={15}
-              className="mx-1.5"
-            />
-            {basename(rootPath)}
-          </span>
-  
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex-1 flex min-w-0 items-center truncate rounded-sm text-xs font-medium text-foreground/80 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+                title={`${rootPath}\nSort: ${FILE_SORT_LABELS[fileSort]}`}
+                aria-label="Sort files"
+              >
+                <img
+                  src={folderIconUrl(basename(rootPath), false)}
+                  alt=""
+                  height={15}
+                  width={15}
+                  className="mx-1.5 shrink-0"
+                />
+                <span className="truncate">{basename(rootPath)}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-48">
+              <DropdownMenuRadioGroup
+                value={fileSort}
+                onValueChange={(v) => void setFileSort(v as FileSort)}
+              >
+                {FILE_SORT_OPTIONS.map((opt) => (
+                  <DropdownMenuRadioItem key={opt} value={opt}>
+                    {FILE_SORT_LABELS[opt]}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
             variant="ghost"
             size="icon"
@@ -252,6 +289,22 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(
             aria-label="Search files"
           >
             <HugeiconsIcon icon={Search01Icon} size={13} strokeWidth={2} />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            onClick={() => void setShowHidden(!showHidden)}
+            title={showHidden ? "Hide hidden files" : "Show hidden files"}
+            aria-label={showHidden ? "Hide hidden files" : "Show hidden files"}
+            aria-pressed={showHidden}
+          >
+            <HugeiconsIcon
+              icon={showHidden ? EyeIcon : ViewOffSlashIcon}
+              size={13}
+              strokeWidth={2}
+            />
           </Button>
   
           <Button
