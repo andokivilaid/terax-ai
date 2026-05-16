@@ -42,6 +42,7 @@ import {
   type SearchInlineHandle,
   type SearchTarget,
 } from "@/modules/header";
+import { useLaunchersStore, useLauncherShortcuts } from "@/modules/launchers";
 import { PreviewStack, type PreviewPaneHandle } from "@/modules/preview";
 import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
@@ -270,6 +271,7 @@ export default function App() {
     void hydrateSessions();
     void useAgentsStore.getState().hydrate();
     void useSnippetsStore.getState().hydrate();
+    void useLaunchersStore.getState().hydrate();
   }, [hydrateSessions]);
 
   const activeTab = tabs.find((t) => t.id === activeId);
@@ -606,6 +608,33 @@ export default function App() {
     [newPreviewTab],
   );
 
+  const launchers = useLaunchersStore((s) => s.launchers);
+  const launchCustom = useCallback(
+    (id: string) => {
+      const l = useLaunchersStore.getState().launchers.find((x) => x.id === id);
+      if (!l) return;
+      if (l.kind === "preview") {
+        openPreviewTab(l.value);
+        return;
+      }
+      const cmd = l.value;
+      if (!cmd.trim()) {
+        newTab(inheritedCwdForNewTab());
+        return;
+      }
+      const tabId = newTab(inheritedCwdForNewTab());
+      setTimeout(() => {
+        const tab = tabsRef.current.find((x) => x.id === tabId);
+        if (!tab || tab.kind !== "terminal") return;
+        const t = terminalRefs.current.get(tab.activeLeafId);
+        if (!t) return;
+        t.write(`${cmd}\r`);
+        t.focus();
+      }, 80);
+    },
+    [newTab, inheritedCwdForNewTab, openPreviewTab],
+  );
+
   const splitActivePaneInActiveTab = useCallback(
     (dir: "row" | "col") => {
       const t = tabsRef.current.find((x) => x.id === activeId);
@@ -670,6 +699,7 @@ export default function App() {
   );
 
   useGlobalShortcuts(shortcutHandlers);
+  useLauncherShortcuts(launchCustom);
 
   const registerTerminalHandle = useCallback(
     (leafId: number, h: TerminalPaneHandle | null) => {
@@ -813,6 +843,8 @@ export default function App() {
             onNewEditor={() => setNewEditorOpen(true)}
             onClose={handleClose}
             onPin={pinTab}
+            launchers={launchers}
+            onLaunch={launchCustom}
             onToggleSidebar={toggleSidebar}
             onSplit={splitActivePaneInActiveTab}
             canSplit={

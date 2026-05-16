@@ -3,12 +3,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fmtShortcut, MOD_KEY } from "@/lib/platform";
+import { fmtShortcut, KEY_SEP, MOD_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { fileIconUrl } from "@/modules/explorer/lib/iconResolver";
+import type { Launcher } from "@/modules/launchers";
+import { getBindingTokens } from "@/modules/shortcuts/shortcuts";
 import {
   Cancel01Icon,
   ComputerTerminal02Icon,
@@ -33,6 +36,8 @@ type Props = {
   onClose: (id: number) => void;
   /** Pin (promote) a preview tab to persistent on double-click. */
   onPin: (id: number) => void;
+  launchers: Launcher[];
+  onLaunch: (id: string) => void;
   compact?: boolean;
 };
 
@@ -46,6 +51,8 @@ export function TabBar({
   onNewEditor,
   onClose,
   onPin,
+  launchers,
+  onLaunch,
   compact,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -194,6 +201,35 @@ export function TabBar({
                 {fmtShortcut(MOD_KEY, "P")}
               </span>
             </DropdownMenuItem>
+            {launchers.length > 0 ? (
+              <>
+                <DropdownMenuSeparator />
+                {launchers.map((l) => (
+                  <DropdownMenuItem
+                    key={l.id}
+                    onSelect={() => onLaunch(l.id)}
+                  >
+                    <HugeiconsIcon
+                      icon={
+                        l.kind === "terminal"
+                          ? ComputerTerminal02Icon
+                          : Globe02Icon
+                      }
+                      size={14}
+                      strokeWidth={1.75}
+                    />
+                    <span className="flex-1 truncate">
+                      {l.name || "(unnamed)"}
+                    </span>
+                    {l.shortcut ? (
+                      <span className="text-xs text-muted-foreground">
+                        {getBindingTokens(l.shortcut).join(KEY_SEP)}
+                      </span>
+                    ) : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

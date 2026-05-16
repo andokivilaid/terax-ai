@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export type SettingsTab =
   | "general"
   | "shortcuts"
+  | "launchers"
   | "models"
   | "agents"
   | "about";

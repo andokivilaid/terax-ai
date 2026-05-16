@@ -5,6 +5,7 @@ import type { SettingsTab } from "@/modules/settings/openSettingsWindow";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   AiScanIcon,
+  ComputerTerminal02Icon,
   InformationCircleIcon,
   Settings01Icon,
   UserMultiple02Icon,
@@ -16,6 +17,7 @@ import { JSX, useEffect, useState } from "react";
 import { AboutSection } from "./sections/AboutSection";
 import { AgentsSection } from "./sections/AgentsSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import { LaunchersSection } from "./sections/LaunchersSection";
 import { ModelsSection } from "./sections/ModelsSection";
 import { ShortcutsSection } from "./sections/ShortcutsSection";
 
@@ -23,6 +25,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Settings01Icon, compo
   [
     { id: "general", label: "General", icon: Settings01Icon, component: GeneralSection },
     { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon, component: ShortcutsSection },
+    { id: "launchers", label: "Launchers", icon: ComputerTerminal02Icon, component: LaunchersSection },
     { id: "models", label: "Models", icon: AiScanIcon, component: ModelsSection },
     { id: "agents", label: "Agents", icon: UserMultiple02Icon, component: AgentsSection },
     { id: "about", label: "About", icon: InformationCircleIcon, component: AboutSection },
@@ -31,6 +34,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Settings01Icon, compo
 const VALID_TABS: SettingsTab[] = [
   "general",
   "shortcuts",
+  "launchers",
   "models",
   "agents",
   "about",

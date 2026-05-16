@@ -13,6 +13,7 @@ import {
   SHORTCUTS,
   type ShortcutId,
 } from "@/modules/shortcuts/shortcuts";
+import type { Launcher } from "@/modules/launchers";
 import type { Tab } from "@/modules/tabs";
 import { TabBar } from "@/modules/tabs";
 import {
@@ -42,6 +43,8 @@ type Props = {
   onClose: (id: number) => void;
   /** Promote a preview (transient) tab to persistent. */
   onPin: (id: number) => void;
+  launchers: Launcher[];
+  onLaunch: (id: string) => void;
   onToggleSidebar: () => void;
   onSplit: (dir: "row" | "col") => void;
   /** Active tab is a terminal and below the per-tab pane cap. */
@@ -64,6 +67,8 @@ export function Header({
   onNewEditor,
   onClose,
   onPin,
+  launchers,
+  onLaunch,
   onToggleSidebar,
   onSplit,
   canSplit,
@@ -210,6 +215,8 @@ export function Header({
           onNewEditor={onNewEditor}
           onClose={onClose}
           onPin={onPin}
+          launchers={launchers}
+          onLaunch={onLaunch}
           compact={compact}
         />
         <div data-tauri-drag-region className="h-full min-w-2 flex-1" />
