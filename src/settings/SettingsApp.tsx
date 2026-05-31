@@ -7,6 +7,7 @@ import {
   AiScanIcon,
   ComputerTerminal02Icon,
   InformationCircleIcon,
+  PaintBoardIcon,
   Settings01Icon,
   UserMultiple02Icon,
   KeyboardIcon,
@@ -20,10 +21,12 @@ import { GeneralSection } from "./sections/GeneralSection";
 import { LaunchersSection } from "./sections/LaunchersSection";
 import { ModelsSection } from "./sections/ModelsSection";
 import { ShortcutsSection } from "./sections/ShortcutsSection";
+import { ThemesSection } from "./sections/ThemesSection";
 
 const TABS: { id: SettingsTab; label: string; icon: typeof Settings01Icon, component: () => JSX.Element }[] =
   [
     { id: "general", label: "General", icon: Settings01Icon, component: GeneralSection },
+    { id: "themes", label: "Themes", icon: PaintBoardIcon, component: ThemesSection },
     { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon, component: ShortcutsSection },
     { id: "launchers", label: "Launchers", icon: ComputerTerminal02Icon, component: LaunchersSection },
     { id: "models", label: "Models", icon: AiScanIcon, component: ModelsSection },
@@ -33,6 +36,7 @@ const TABS: { id: SettingsTab; label: string; icon: typeof Settings01Icon, compo
 
 const VALID_TABS: SettingsTab[] = [
   "general",
+  "themes",
   "shortcuts",
   "launchers",
   "models",

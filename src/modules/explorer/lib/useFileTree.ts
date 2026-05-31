@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currentWorkspaceEnv } from "@/modules/workspace";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import type { FileSort } from "@/modules/settings/store";
+import { listenFsChanged, watchAdd, watchRemove } from "./watch";
 
 export type DirEntry = {
   name: string;
@@ -33,6 +34,31 @@ export function dirname(path: string): string {
   const i = path.lastIndexOf("/");
   if (i <= 0) return "/";
   return path.slice(0, i);
+}
+
+const EXPANSION_CACHE_LIMIT = 8;
+const expansionCache = new Map<string, string[]>();
+
+function rememberExpansion(root: string, expanded: Set<string>): void {
+  expansionCache.delete(root);
+  if (expanded.size > 0) expansionCache.set(root, [...expanded]);
+  while (expansionCache.size > EXPANSION_CACHE_LIMIT) {
+    const oldest = expansionCache.keys().next().value;
+    if (oldest === undefined) break;
+    expansionCache.delete(oldest);
+  }
+}
+
+function recallExpansion(root: string): string[] {
+  const v = expansionCache.get(root);
+  if (!v) return [];
+  expansionCache.delete(root);
+  expansionCache.set(root, v);
+  return v;
+}
+
+function isUnder(key: string, root: string): boolean {
+  return key === root || key.startsWith(`${root}/`);
 }
 
 type Options = {
@@ -85,9 +111,32 @@ export function useFileTree(rootPath: string | null, options?: Options) {
   );
   const [renaming, setRenaming] = useState<string | null>(null);
 
+  const expandedRef = useRef(expanded);
+  const nodesRef = useRef(nodes);
+  const watchedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     showHiddenRef.current = showHidden;
   }, [showHidden]);
+
+  useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  const addWatch = useCallback((path: string) => {
+    if (watchedRef.current.has(path)) return;
+    watchedRef.current.add(path);
+    watchAdd([path]);
+  }, []);
+
+  const removeWatch = useCallback((path: string) => {
+    if (!watchedRef.current.delete(path)) return;
+    watchRemove([path]);
+  }, []);
 
   const fetchChildren = useCallback(async (path: string) => {
     setNodes((s) => ({ ...s, [path]: { status: "loading" } }));
@@ -97,7 +146,44 @@ export function useFileTree(rootPath: string | null, options?: Options) {
         showHidden: showHiddenRef.current,
         workspace: currentWorkspaceEnv(),
       });
-      setNodes((s) => ({ ...s, [path]: { status: "loaded", entries } }));
+
+      const liveDirs = new Set(
+        entries.filter((e) => e.kind === "dir").map((e) => joinPath(path, e.name)),
+      );
+      const removedRoots: string[] = [];
+      for (const key of Object.keys(nodesRef.current)) {
+        if (dirname(key) === path && !liveDirs.has(key)) removedRoots.push(key);
+      }
+      const dead = new Set<string>();
+      if (removedRoots.length > 0) {
+        const candidates = new Set<string>([
+          ...Object.keys(nodesRef.current),
+          ...expandedRef.current,
+          ...watchedRef.current,
+        ]);
+        for (const k of candidates) {
+          if (removedRoots.some((r) => isUnder(k, r))) dead.add(k);
+        }
+      }
+
+      setNodes((s) => {
+        const next: TreeState = {};
+        for (const [k, v] of Object.entries(s)) if (!dead.has(k)) next[k] = v;
+        next[path] = { status: "loaded", entries };
+        return next;
+      });
+
+      if (dead.size > 0) {
+        setExpanded((c) => {
+          let changed = false;
+          const n = new Set(c);
+          for (const d of dead) if (n.delete(d)) changed = true;
+          return changed ? n : c;
+        });
+        const toUnwatch: string[] = [];
+        for (const d of dead) if (watchedRef.current.delete(d)) toUnwatch.push(d);
+        watchRemove(toUnwatch);
+      }
     } catch (e) {
       setNodes((s) => ({
         ...s,
@@ -106,7 +192,8 @@ export function useFileTree(rootPath: string | null, options?: Options) {
     }
   }, []);
 
-  // Root change → reset state.
+  // Root change → restore the cached expansion for this root, re-scope watches,
+  // and persist the outgoing root's expansion on the way out.
   useEffect(() => {
     if (!rootPath) {
       setNodes({});
@@ -117,10 +204,47 @@ export function useFileTree(rootPath: string | null, options?: Options) {
     }
     setPendingCreate(null);
     setRenaming(null);
-    setExpanded(new Set());
+
+    const restored = recallExpansion(rootPath);
+    setExpanded(new Set(restored));
     setNodes({});
+
+    const toWatch = [rootPath, ...restored];
     void fetchChildren(rootPath);
+    for (const d of restored) void fetchChildren(d);
+    for (const p of toWatch) watchedRef.current.add(p);
+    watchAdd(toWatch);
+
+    return () => {
+      rememberExpansion(rootPath, expandedRef.current);
+      if (watchedRef.current.size > 0) {
+        watchRemove([...watchedRef.current]);
+        watchedRef.current.clear();
+      }
+    };
   }, [rootPath, fetchChildren]);
+
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | undefined;
+    void listenFsChanged((paths) => {
+      const current = nodesRef.current;
+      const dirs = new Set<string>();
+      for (const p of paths) {
+        const parent = dirname(p);
+        if (current[parent]?.status === "loaded") dirs.add(parent);
+        if (current[p]?.status === "loaded") dirs.add(p);
+      }
+      for (const d of dirs) void fetchChildren(d);
+    }).then((un) => {
+      if (alive) unlisten = un;
+      else un();
+    });
+    return () => {
+      alive = false;
+      unlisten?.();
+    };
+  }, [fetchChildren]);
 
   useEffect(() => {
     if (!rootPath) return;
@@ -136,36 +260,38 @@ export function useFileTree(rootPath: string | null, options?: Options) {
 
   const toggle = useCallback(
     (path: string) => {
-      setExpanded((curr) => {
-        const next = new Set(curr);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        return next;
-      });
-      setNodes((curr) => {
-        if (!curr[path] || curr[path].status === "error") {
-          void fetchChildren(path);
-        }
-        return curr;
-      });
+      if (expandedRef.current.has(path)) {
+        setExpanded((curr) => {
+          const next = new Set(curr);
+          next.delete(path);
+          return next;
+        });
+        removeWatch(path);
+      } else {
+        setExpanded((curr) => {
+          const next = new Set(curr);
+          next.add(path);
+          return next;
+        });
+        addWatch(path);
+        void fetchChildren(path);
+      }
     },
-    [fetchChildren],
+    [fetchChildren, addWatch, removeWatch],
   );
 
   const expand = useCallback(
     (path: string) => {
+      if (expandedRef.current.has(path)) return;
       setExpanded((curr) => {
-        if (curr.has(path)) return curr;
         const next = new Set(curr);
         next.add(path);
         return next;
       });
-      setNodes((curr) => {
-        if (!curr[path]) void fetchChildren(path);
-        return curr;
-      });
+      addWatch(path);
+      void fetchChildren(path);
     },
-    [fetchChildren],
+    [fetchChildren, addWatch],
   );
 
   const refresh = useCallback(
@@ -189,13 +315,14 @@ export function useFileTree(rootPath: string | null, options?: Options) {
           next.add(parentPath);
           return next;
         });
+        addWatch(parentPath);
       }
       setNodes((curr) => {
         if (!curr[parentPath]) void fetchChildren(parentPath);
         return curr;
       });
     },
-    [rootPath, fetchChildren],
+    [rootPath, fetchChildren, addWatch],
   );
 
   const cancelCreate = useCallback(() => setPendingCreate(null), []);
